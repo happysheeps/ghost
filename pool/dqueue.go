@@ -42,7 +42,7 @@ func (s *Deque) Prepend(item interface{}) {
 	s.gate <- struct{}{}
 }
 
-type WalkFunc func(itme interface{}) interface{}
+type WalkFunc func(pitem *interface{}) interface{}
 
 // Walk
 func (s *Deque) Walk(walkFn WalkFunc) []interface{} {
@@ -119,17 +119,19 @@ func (s *deque) walk(walkFn WalkFunc) []interface{} {
 	s.Lock()
 	defer s.Unlock()
 
-	rst := make([]interface{}, 0, s.capacity)
+	c := make([]interface{}, 0, s.capacity)
 	item := s.container.Front()
 
 	for {
 		if item != nil {
-			rst = append(rst, walkFn(item.Value))
+			if rst := walkFn(&item.Value); rst != nil {
+				c = append(c, rst)
+			}
 			item = item.Next()
 		} else {
 			break
 		}
 	}
 
-	return rst
+	return c
 }

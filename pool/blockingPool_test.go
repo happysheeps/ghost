@@ -15,7 +15,10 @@ func makeConn() (net.Conn, error) {
 }
 
 func Test_Get(t *testing.T) {
-	pool, _ := NewBlockingPool(5, 5, 10*time.Second, makeConn)
+	pool, err := NewBlockingPool(3, 5, 10*time.Second, makeConn)
+	if err != nil {
+		t.Error(err)
+	}
 	for i := 0; i < 100; i++ {
 		if conn, err := pool.Get(); err != nil {
 			t.Error(err)
@@ -26,7 +29,7 @@ func Test_Get(t *testing.T) {
 }
 
 func Test_Write(t *testing.T) {
-	pool, _ := NewBlockingPool(5, 5, 10*time.Second, makeConn)
+	pool, _ := NewBlockingPool(2, 5, 10*time.Second, makeConn)
 	conn, err := pool.Get()
 	if err != nil {
 		t.Error(err)
@@ -55,7 +58,7 @@ func Test_Read(t *testing.T) {
 	}
 	blob := make([]byte, 1024)
 	conn.Close()
-	if _, err = conn.Read(blob); err.Error() != "read conn fail: conn is in pool" {
+	if _, err = conn.Read(blob); err.Error() != "read conn fail: conn is already closed" {
 		t.Error(err)
 	}
 }

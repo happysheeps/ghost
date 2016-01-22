@@ -12,58 +12,74 @@ type wrappedConn struct {
 	net.Conn
 	pool       *blockingPool
 	unusable   bool
-	inPool     bool
+	closed     bool
 	lastAccess time.Time
 	liveTime   time.Duration
+	//net.Conn generator
+	factory Factory
+}
+
+// genChild
+func (c *wrappedConn) genChild() *wrappedConn {
+	return &wrappedConn{
+		nil,
+		c.pool,
+		true,
+		true,
+		time.Now(),
+		c.liveTime,
+		c.factory,
+	}
 }
 
 //TODO
 func (c *wrappedConn) Close() error {
-	if c.inPool {
-		return fmt.Errorf("close conn fail: conn is in pool")
+	if c.closed {
+		return fmt.Errorf("close conn fail: conn is already closed")
 	}
 
-	if err := c.pool.put(c); err != nil {
-		return err
+	if c.unusable {
+		c.destory()
+		c.pool.putBottom(c)
+
+	} else {
+		c.pool.putTop(c)
 	}
 
+	c.closed = true
 	return nil
 }
 
-// updateNetConn
-func (c *wrappedConn) updateNetConn(newNetConn net.Conn) {
-	c.Conn = newNetConn
-	c.unusable = false
-	c.lastAccess = time.Now()
+// getInactiveNetConn
+func (c *wrappedConn) checkIdle() bool {
+	if time.Since(c.lastAccess) > c.liveTime && c.Conn != nil {
+		return true
+	}
+	return false
 }
 
-// setNetConnNil set inner net conn to nil and return old net conn
-func (c *wrappedConn) setNetConnNil() (oldNetConn net.Conn) {
-	oldNetConn = c.Conn
+// activate
+func (c *wrappedConn) activate() error {
+	c.closed = false
+	if c.Conn == nil {
+		if conn, err := c.factory(); err != nil {
+			c.Close()
+			return err
+		} else {
+			c.Conn = conn
+			c.unusable = false
+			c.lastAccess = time.Now()
+		}
+	}
+	return nil
+}
+
+// destory
+func (c *wrappedConn) destory() {
+	conn := c.Conn
 	c.Conn = nil
 	c.unusable = true
-	c.lastAccess = time.Now()
-	return
-}
-
-// closeNetConn close inner net conn and set it to nil
-func (c *wrappedConn) closeNetConn() {
-	if conn := c.setNetConnNil(); conn != nil {
-		conn.Close()
-	}
-}
-
-// getInactiveNetConn
-func (c *wrappedConn) getInactiveNetConn() (conn net.Conn) {
-	if time.Since(c.lastAccess) > c.liveTime && c.Conn != nil {
-		conn = c.setNetConnNil()
-	}
-	return
-}
-
-// closeInactiveNetConn
-func (c *wrappedConn) closeInactiveNetConn() {
-	if conn := c.getInactiveNetConn(); conn != nil {
+	if conn != nil {
 		conn.Close()
 	}
 }
@@ -71,8 +87,8 @@ func (c *wrappedConn) closeInactiveNetConn() {
 //Write checkout the error returned from the origin Write() method.
 //If the error is not nil, the connection is marked as unusable.
 func (c *wrappedConn) Write(b []byte) (n int, err error) {
-	if c.inPool {
-		err = fmt.Errorf("write conn fail: conn is in pool")
+	if c.closed {
+		err = fmt.Errorf("write conn fail: conn is already closed")
 		return
 	}
 	//c.Conn is certainly not nil
@@ -87,8 +103,8 @@ func (c *wrappedConn) Write(b []byte) (n int, err error) {
 
 //Read works the same as Write.
 func (c *wrappedConn) Read(b []byte) (n int, err error) {
-	if c.inPool {
-		err = fmt.Errorf("read conn fail: conn is in pool")
+	if c.closed {
+		err = fmt.Errorf("read conn fail: conn is already closed")
 		return
 	}
 
@@ -104,13 +120,18 @@ func (c *wrappedConn) Read(b []byte) (n int, err error) {
 }
 
 //wrap wraps net.Conn and start a delayClose goroutine
-func (p *blockingPool) wrap(conn net.Conn, livetime time.Duration) *wrappedConn {
-	return &wrappedConn{
+func (p *blockingPool) wrap(conn net.Conn, livetime time.Duration, factory Factory) (c *wrappedConn) {
+	c = &wrappedConn{
 		conn,
 		p,
 		true,
 		true,
 		time.Now(),
 		livetime,
+		factory,
 	}
+	if c.Conn != nil {
+		c.unusable = false
+	}
+	return
 }
