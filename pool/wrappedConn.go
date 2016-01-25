@@ -19,19 +19,6 @@ type wrappedConn struct {
 	factory Factory
 }
 
-// genChild
-func (c *wrappedConn) genChild() *wrappedConn {
-	return &wrappedConn{
-		nil,
-		c.pool,
-		true,
-		true,
-		time.Now(),
-		c.liveTime,
-		c.factory,
-	}
-}
-
 //TODO
 func (c *wrappedConn) Close() error {
 	if c.closed {
@@ -51,15 +38,14 @@ func (c *wrappedConn) Close() error {
 }
 
 // getInactiveNetConn
-func (c *wrappedConn) checkIdle() bool {
+func (c *wrappedConn) checkIdle() {
 	if time.Since(c.lastAccess) > c.liveTime && c.Conn != nil {
-		return true
+		c.destory()
 	}
-	return false
 }
 
-// activate
-func (c *wrappedConn) activate() error {
+// awake
+func (c *wrappedConn) awake() error {
 	c.closed = false
 	if c.Conn == nil {
 		if conn, err := c.factory(); err != nil {

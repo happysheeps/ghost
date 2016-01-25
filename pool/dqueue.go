@@ -42,11 +42,11 @@ func (s *Deque) Prepend(item interface{}) {
 	s.gate <- struct{}{}
 }
 
-type WalkFunc func(pitem *interface{}) interface{}
+type WalkFunc func(item interface{})
 
 // Walk
-func (s *Deque) Walk(walkFn WalkFunc) []interface{} {
-	return s.queue.walk(walkFn)
+func (s *Deque) Walk(walkFn WalkFunc) {
+	s.queue.walk(walkFn)
 }
 
 // Deque is a head-tail linked list data structure implementation.
@@ -115,23 +115,18 @@ func (s *deque) pop() interface{} {
 
 // walk traverses the deque from front, calling walkFn for each element,
 // and return polymerized result
-func (s *deque) walk(walkFn WalkFunc) []interface{} {
+func (s *deque) walk(walkFn WalkFunc) {
 	s.Lock()
 	defer s.Unlock()
 
-	c := make([]interface{}, 0, s.capacity)
 	item := s.container.Front()
 
 	for {
 		if item != nil {
-			if rst := walkFn(&item.Value); rst != nil {
-				c = append(c, rst)
-			}
+			walkFn(item.Value)
 			item = item.Next()
 		} else {
 			break
 		}
 	}
-
-	return c
 }

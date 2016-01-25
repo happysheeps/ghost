@@ -63,23 +63,11 @@ func NewBlockingPool(initCap, maxCap int, livetime time.Duration, factory Factor
 func (p *blockingPool) checkIdleConn() {
 	for {
 		time.Sleep(p.checkPeriod)
-		// walk and check whether a wrapped connection is idle. If idle, generate a new one
-		// to replace it. Close of the old connection happend after walk completed
-		result := p.conns.Walk(func(pItem *interface{}) interface{} {
-			c := (*pItem).(*wrappedConn)
-			if c.checkIdle() {
-				*pItem = c.genChild()
-				return c
-			} else {
-				return nil
-			}
+		// walk and check whether a wrapped connection is idle.
+		p.conns.Walk(func(item interface{}) {
+			c := (item).(*wrappedConn)
+			c.checkIdle()
 		})
-		for _, v := range result {
-			if v != nil {
-				conn := v.(*wrappedConn)
-				conn.destory()
-			}
-		}
 	}
 }
 
@@ -97,7 +85,7 @@ func (p *blockingPool) Get() (net.Conn, error) {
 	}
 	conn := item.(*wrappedConn)
 
-	if err = conn.activate(); err != nil {
+	if err = conn.awake(); err != nil {
 		return nil, err
 	}
 
